@@ -50,6 +50,12 @@ test-integration: install
 test-python:
 	cd python/ && pytest -vv
 
+
+# TODO: enforce this in tests when all types work!
+.PHONY: test-python-types
+test-python-types:
+	mypy python/cog python/tests
+
 .PHONY: test
 test: test-go test-python test-integration
 
