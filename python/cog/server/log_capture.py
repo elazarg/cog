@@ -81,7 +81,7 @@ def capture_log(logs_dest):
 # created from the predictor subprocess, which is set to use the spawn method.
 # As currently written, this log process relies on shared state in a way that
 # doesn't work with the spawn method.
-class LogProcess(multiprocessing.get_context("fork").Process):
+class LogProcess(multiprocessing.get_context("fork").Process):  # type: ignore
     def __init__(
         self,
         logs_dest,

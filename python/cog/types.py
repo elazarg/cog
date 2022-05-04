@@ -6,7 +6,7 @@ import pathlib
 import requests
 import shutil
 import tempfile
-from typing import Any, List, Optional
+from typing import Any, List, Union
 from urllib.parse import urlparse
 
 from pydantic import Field
@@ -21,7 +21,7 @@ def Input(
     min_length: int = None,
     max_length: int = None,
     regex: str = None,
-    choices: List[str | int] = None,
+    choices: List[Union[str, int]] = None,
 ):
     """Input is similar to pydantic.Field, but doesn't require a default value to be the first argument."""
     return Field(
