@@ -1,3 +1,4 @@
+import datetime
 import io
 import json
 from pathlib import Path
@@ -211,12 +212,12 @@ class RedisQueueWorker:
             while self.runner.is_processing() and not self.runner.has_output_waiting():
                 if self.runner.has_logs_waiting():
                     logs.extend(self.runner.read_logs())
-                    self.redis.rpush(response_queue, json.dumps(response))
+                    self.push_message(response_queue, response)
 
             if self.runner.error() is not None:
                 response["status"] = Status.FAILED
                 response["error"] = str(self.runner.error())
-                self.redis.rpush(response_queue, json.dumps(response))
+                self.push_message(response_queue, response)
                 return
 
             if self.runner.is_output_generator():
@@ -243,30 +244,30 @@ class RedisQueueWorker:
                         # here to give the predictor subprocess a chance to exit
                         # so we don't send a double message for final output, at
                         # the cost of extra latency
-                        self.redis.rpush(response_queue, json.dumps(response))
+                        self.push_message(response_queue, response)
 
                 if self.runner.error() is not None:
                     response["status"] = Status.FAILED
                     response["error"] = str(self.runner.error())
-                    self.redis.rpush(response_queue, json.dumps(response))
+                    self.push_message(response_queue, response)
                     return
 
                 response["status"] = Status.SUCCEEDED
                 output.extend(self.encode_json(o) for o in self.runner.read_output())
                 logs.extend(self.runner.read_logs())
-                self.redis.rpush(response_queue, json.dumps(response))
+                self.push_message(response_queue, response)
 
             else:
                 # just send logs until output ends
                 while self.runner.is_processing():
                     if self.runner.has_logs_waiting():
                         logs.extend(self.runner.read_logs())
-                        self.redis.rpush(response_queue, json.dumps(response))
+                        self.push_message(response_queue, response)
 
                 if self.runner.error() is not None:
                     response["status"] = Status.FAILED
                     response["error"] = str(self.runner.error())
-                    self.redis.rpush(response_queue, json.dumps(response))
+                    self.push_message(response_queue, response)
                     return
 
                 output = self.runner.read_output()
@@ -275,22 +276,29 @@ class RedisQueueWorker:
                 response["status"] = Status.SUCCEEDED
                 response["output"] = self.encode_json(output[0])
                 logs.extend(self.runner.read_logs())
-                self.redis.rpush(response_queue, json.dumps(response))
+                self.push_message(response_queue, response)
 
     def download(self, url):
         resp = requests.get(url)
         resp.raise_for_status()
         return resp.content
 
-    def push_error(self, response_queue, error):
+    def push_message(self, response_queue, response):
         message = json.dumps(
             {
-                "status": "failed",
-                "error": str(error),
+                **response,
+                **{"timestamp": datetime.datetime.now().isoformat()},
             }
         )
-        sys.stderr.write(f"Pushing error to {response_queue}\n")
         self.redis.rpush(response_queue, message)
+
+    def push_error(self, response_queue, error):
+        response = {
+            "status": "failed",
+            "error": str(error),
+        }
+        sys.stderr.write(f"Pushing error to {response_queue}\n")
+        self.push_message(response_queue, response)
 
     def encode_json(self, obj):
         def upload_file(fh: io.IOBase) -> str:
